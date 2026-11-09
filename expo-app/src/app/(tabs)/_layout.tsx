@@ -12,7 +12,8 @@ export default function TabsLayout() {
     <Tabs.Screen name="index" options={{ title: 'Overview', tabBarIcon: icon('grid-outline') }} />
     <Tabs.Screen name="payments" options={{ title: 'Payments', tabBarIcon: icon('wallet-outline') }} />
     <Tabs.Screen name="returns" options={{ title: 'Returns', tabBarIcon: icon('return-down-back-outline') }} />
-    <Tabs.Screen name="team" options={{ title: 'Team', href: session.user.role === 'admin' ? undefined : null, tabBarIcon: icon('people-outline') }} />
+    <Tabs.Screen name="go" options={{ title: 'GO', tabBarIcon: icon('cube-outline') }} />
+    <Tabs.Screen name="team" options={{ href: null }} />
     <Tabs.Screen name="account" options={{ title: 'Account', tabBarIcon: icon('person-circle-outline') }} />
   </Tabs></WorkspaceProvider>;
 }

@@ -1,12 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { useSession } from './session';
-import { Dashboard, Payment, Refund, User } from '../lib/types';
+import { Dashboard, GoRecord, Payment, Refund, User } from '../lib/types';
 import { errorText } from '../lib/format';
 
-type Data = { dashboard: Dashboard; payments: Payment[]; refunds: Refund[]; employees: User[] };
+type Data = { dashboard: Dashboard; payments: Payment[]; refunds: Refund[]; employees: User[]; gos: GoRecord[] };
 type Workspace = Data & { loading: boolean; error: string; busy: boolean; refresh: () => Promise<void>; action: (path: string, data?: object, method?: string) => Promise<boolean> };
-const empty: Data = { dashboard: { paid_paise: 0, pending_paise: 0, refunded_paise: 0, net_paise: 0, count: 0 }, payments: [], refunds: [], employees: [] };
+const empty: Data = { dashboard: { paid_paise: 0, pending_paise: 0, refunded_paise: 0, net_paise: 0, count: 0 }, payments: [], refunds: [], employees: [], gos: [] };
 const Context = createContext<Workspace | null>(null);
 export function WorkspaceProvider({ children }: React.PropsWithChildren) {
   const { session } = useSession();
@@ -20,11 +20,12 @@ export function WorkspaceProvider({ children }: React.PropsWithChildren) {
     if (!session) return;
     const current = ++generation.current;
     try {
-      const [dashboard, payments, refunds, employees] = await Promise.all([
+      const [dashboard, payments, refunds, employees, gos] = await Promise.all([
         session.api.call<Dashboard>('/dashboard'), session.api.call<Payment[]>('/payments'), session.api.call<Refund[]>('/refunds'),
         session.user.role === 'admin' ? session.api.call<User[]>('/employees') : Promise.resolve([]),
+        session.api.call<GoRecord[]>('/gos'),
       ]);
-      if (current === generation.current) { setData({ dashboard, payments, refunds, employees }); setError(''); }
+      if (current === generation.current) { setData({ dashboard, payments, refunds, employees, gos }); setError(''); }
     } catch (e) { if (current === generation.current) setError(errorText(e)); }
     finally { if (current === generation.current) setLoading(false); }
   }, [session]);

@@ -12,14 +12,13 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#176B53",
+        "backgroundColor": "#E9EFED",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundImage": "./assets/android-icon-background.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.sapcoder.palmapp",
-      "versionCode": 1,
+      "versionCode": 3,
       "permissions": [
         "android.permission.INTERNET"
       ]
@@ -29,7 +28,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-sharing"
     ],
     "owner": "sapcoder",
     "scheme": "palm",

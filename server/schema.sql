@@ -16,6 +16,18 @@ CREATE TABLE IF NOT EXISTS payments (
  employee_id UUID NOT NULL REFERENCES users(id), created_at TIMESTAMPTZ NOT NULL DEFAULT now(), paid_at TIMESTAMPTZ,
  idempotency_key UUID UNIQUE NOT NULL
 );
+CREATE TABLE IF NOT EXISTS go_records (
+ id UUID PRIMARY KEY,
+ go_date DATE NOT NULL,
+ tons NUMERIC(15,3) NOT NULL CHECK(tons > 0),
+ price_per_ton_paise BIGINT NOT NULL CHECK(price_per_ton_paise > 0),
+ amount_received_paise BIGINT NOT NULL DEFAULT 0 CHECK(amount_received_paise >= 0),
+ received_date DATE,
+ employee_id UUID NOT NULL REFERENCES users(id),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ idempotency_key UUID UNIQUE NOT NULL,
+ CHECK(amount_received_paise = 0 OR received_date IS NOT NULL)
+);
 CREATE TABLE IF NOT EXISTS refunds (
  id UUID PRIMARY KEY, payment_id UUID NOT NULL REFERENCES payments(id), amount_paise BIGINT NOT NULL CHECK(amount_paise > 0),
  reason TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
@@ -30,4 +42,5 @@ CREATE TABLE IF NOT EXISTS login_attempts (
  identity TEXT PRIMARY KEY, attempts INTEGER NOT NULL, window_start TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS payments_employee_idx ON payments(employee_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS go_records_employee_idx ON go_records(employee_id, go_date DESC);
 CREATE INDEX IF NOT EXISTS refunds_payment_idx ON refunds(payment_id);

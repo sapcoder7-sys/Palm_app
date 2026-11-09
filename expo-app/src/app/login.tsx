@@ -8,9 +8,10 @@ import { errorText } from '../lib/format';
 import { Button, ErrorBox, Field, Icon, s } from '../components/ui';
 import { useSession } from '../state/session';
 
+const API_SERVER = 'https://palm-app-3j9n.onrender.com';
+
 export default function Login() {
   const { session, setSession } = useSession();
-  const [server, setServer] = useState(process.env.EXPO_PUBLIC_API_URL || '');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -20,8 +21,8 @@ export default function Login() {
     if (busy) return;
     setError('');
     try {
-      const api = new Api(normalizeServer(server, __DEV__));
-      if (!email.trim().includes('@') || !password) throw new Error('Enter your email and password.');
+      const api = new Api(normalizeServer(API_SERVER, __DEV__));
+      if (!email.trim().includes('@') || !password) throw new Error('Enter your user ID (email) and password.');
       setBusy(true);
       const result = await api.call<{ token: string; user: User }>('/auth/login', 'POST', { email: email.trim(), password });
       api.token = result.token; api.onUnauthorized = () => setSession(null);
@@ -34,12 +35,11 @@ export default function Login() {
       <View style={{ width: '100%', maxWidth: 460, alignSelf: 'center' }}>
         <View style={{ alignItems: 'center', gap: 10, marginBottom: 40 }}><Icon name="leaf" size={58} /><Text style={[s.h1, { fontSize: 42 }]}>Palm</Text><Text style={s.muted}>Every payment. A clearer picture.</Text></View>
         <Text style={s.h1}>Welcome back</Text><Text style={[s.muted, { marginTop: 8, marginBottom: 24 }]}>Sign in to your business workspace.</Text>
-        <Field label="Server address" value={server} onChangeText={setServer} autoCapitalize="none" autoCorrect={false} keyboardType="url" placeholder="https://your-server.com" />
-        <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="username" />
+        <Field label="User ID (email)" value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" autoComplete="username" />
         <Field label="Password" value={password} onChangeText={setPassword} secureTextEntry maxLength={256} autoComplete="current-password" onSubmitEditing={() => void login()} />
         {!!error && <View style={{ marginBottom: 15 }}><ErrorBox message={error} /></View>}
         <Button label={busy ? 'Signing in…' : 'Sign in'} disabled={busy} onPress={() => void login()} />
-        <Text style={[s.muted, { textAlign: 'center', marginTop: 24, fontSize: 12 }]}>Your administrator provides your account and server address.</Text>
+        <Text style={[s.muted, { textAlign: 'center', marginTop: 24, fontSize: 12 }]}>Use the user ID and password provided by your administrator.</Text>
       </View>
     </ScrollView>
   </KeyboardAvoidingView></SafeAreaView>;

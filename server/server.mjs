@@ -7,6 +7,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
+import ExcelJS from 'exceljs';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -31,6 +32,7 @@ const schemas = {
   login: z.object({ email: z.string().trim().email().max(320), password: z.string().min(1).max(256) }),
   employee: z.object({ name: z.string().trim().min(1).max(200), email: z.string().trim().email().max(320), password: z.string().min(12).max(256), role: z.enum(['employee','admin']).default('employee'), phone: z.string().trim().max(30).default(''), avatar_url: z.union([z.string().url().max(1000),z.literal('')]).default('') }),
   payment: z.object({ customer: z.string().trim().min(1).max(200), amount: z.union([z.string(),z.number()]), method: z.enum(['Cash','UPI','Bank','Card']), status: z.enum(['paid','pending']), reference: z.string().trim().max(200).default(''), notes: z.string().trim().max(1000).default(''), idempotency_key: z.string().uuid() }),
+  go: z.object({ go_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), tons: z.union([z.string(),z.number()]), price_per_ton: z.union([z.string(),z.number()]), amount_received: z.union([z.string(),z.number()]).default('0'), received_date: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/),z.literal('')]).default(''), idempotency_key: z.string().uuid() }),
   refund: z.object({ payment_id: z.string().uuid(), amount: z.union([z.string(),z.number()]), reason: z.string().trim().min(1).max(1000), idempotency_key: z.string().uuid() }),
 };
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -41,7 +43,18 @@ const paise = value => {
   if (!Number.isSafeInteger(cents) || cents < 1 || cents > 10000000000) throw new Error('Amount must be between 0.01 and 100,000,000.');
   return cents;
 };
-const jsonRows = rows => rows.map(row => Object.fromEntries(Object.entries(row).map(([k,v]) => [k, typeof v === 'bigint' ? Number(v) : (['amount_paise','refunded_paise','paid_paise','pending_paise','net_paise','count','id'].includes(k) && typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v)])));
+const nonnegativePaise = value => {
+  const amount = String(value);
+  if (!/^\d+(\.\d{1,2})?$/.test(amount)) throw new Error('Enter a valid amount with no more than two decimal places.');
+  const cents = Math.round(Number(amount) * 100);
+  if (!Number.isSafeInteger(cents) || cents > 10000000000) throw new Error('Amount must not exceed 100,000,000.');
+  return cents;
+};
+const validDate = value => {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+};
+const jsonRows = rows => rows.map(row => Object.fromEntries(Object.entries(row).map(([k,v]) => [k, typeof v === 'bigint' ? Number(v) : (['amount_paise','refunded_paise','paid_paise','pending_paise','net_paise','count','id','price_per_ton_paise','sales_paise','amount_received_paise','outstanding_paise'].includes(k) && typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v)])));
 const fail = (res, message, status = 400) => res.status(status).json({ error: message });
 function transaction(fn) {
   return async (req, res, next) => {
@@ -78,6 +91,15 @@ async function paymentRows(user) {
     COALESCE((SELECT SUM(r.amount_paise) FROM refunds r WHERE r.payment_id=p.id AND r.status='approved'),0)::bigint AS refunded_paise
     FROM payments p JOIN users u ON u.id=p.employee_id WHERE ($1::uuid IS NULL OR p.employee_id=$1) ORDER BY p.created_at DESC`, [scopeId(user)]);
   return jsonRows(rows);
+}
+async function goRows(user) {
+  const { rows } = await pool.query(`SELECT g.id,g.go_date,g.tons,g.price_per_ton_paise,
+    round(g.tons*g.price_per_ton_paise)::bigint AS sales_paise,g.amount_received_paise,
+    (round(g.tons*g.price_per_ton_paise)-g.amount_received_paise)::bigint AS outstanding_paise,
+    g.received_date,g.created_at,u.name AS employee_name
+    FROM go_records g JOIN users u ON u.id=g.employee_id
+    WHERE ($1::uuid IS NULL OR g.employee_id=$1) ORDER BY g.go_date DESC,g.created_at DESC`, [scopeId(user)]);
+  return jsonRows(rows).map(row => ({ ...row, tons: Number(row.tons) }));
 }
 
 app.get('/health', async (_req,res,next) => { try { await pool.query('SELECT 1'); res.json({status:'ok'}); } catch(e) { next(e); } });
@@ -121,6 +143,27 @@ app.post('/payments', authenticate(), transaction(async (req,res,db)=>{
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $5='paid' THEN now() ELSE NULL END,$9)`,[id,data.customer,amount,data.method,data.status,data.reference,data.notes,req.user.id,key]);
   await audit(db,req.user,'payment.created',id); res.status(201).json({id});
 }));
+app.get('/gos', authenticate(), async (req,res,next)=>{ try { res.json(await goRows(req.user)); } catch(e) { next(e); } });
+app.post('/gos', authenticate(), transaction(async (req,res,db)=>{
+  const data=schemas.go.parse(req.body);
+  if (!validDate(data.go_date) || (data.received_date && !validDate(data.received_date))) throw new Error('Enter valid GO and received dates.');
+  const tonsText=String(data.tons);
+  if (!/^\d+(\.\d{1,3})?$/.test(tonsText)) throw new Error('Enter quantity in tons with up to three decimal places.');
+  const tons=Number(tonsText);
+  if (!Number.isFinite(tons) || tons <= 0 || tons > 1000000) throw new Error('Quantity must be greater than zero and at most 1,000,000 tons.');
+  const pricePerTon=paise(data.price_per_ton), amountReceived=nonnegativePaise(data.amount_received);
+  const sales=Math.round(tons*pricePerTon);
+  if (!Number.isSafeInteger(sales) || sales < 1) throw new Error('Calculated sales amount is outside the supported range.');
+  if (amountReceived > sales) throw new Error('Amount received cannot exceed the GO sales amount.');
+  if (amountReceived > 0 && !data.received_date) throw new Error('Enter the received date when an amount has been received.');
+  await db.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[data.idempotency_key]);
+  const existing=(await db.query('SELECT id,employee_id FROM go_records WHERE idempotency_key=$1',[data.idempotency_key])).rows[0];
+  if(existing) return existing.employee_id===req.user.id?res.json({id:existing.id}):fail(res,'Request key already used.',409);
+  const id=randomUUID();
+  await db.query(`INSERT INTO go_records(id,go_date,tons,price_per_ton_paise,amount_received_paise,received_date,employee_id,idempotency_key)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[id,data.go_date,tons.toFixed(3),pricePerTon,amountReceived,data.received_date||null,req.user.id,data.idempotency_key]);
+  await audit(db,req.user,'go.created',id); res.status(201).json({id});
+}));
 app.post('/payments/:id/paid', authenticate(), transaction(async(req,res,db)=>{
   const id=z.string().uuid().parse(req.params.id); const payment=await paymentFor(db,req.user,id,true); if(!payment)return fail(res,'Payment not found.',404);
   if(payment.status==='pending'){await db.query("UPDATE payments SET status='paid',paid_at=now() WHERE id=$1",[id]);await audit(db,req.user,'payment.paid',id);} res.json({ok:true});
@@ -153,6 +196,37 @@ app.get('/reports/payments.csv',authenticate(true),async(_req,res,next)=>{
     };
     const lines=[['ID','Customer','Amount INR','Refunded INR','Status','Method','Employee','Reference','Created UTC'],...rows.map(p=>[p.id,p.customer,(p.amount_paise/100).toFixed(2),(p.refunded_paise/100).toFixed(2),p.status,p.method,p.employee_name,p.reference,new Date(p.created_at).toISOString()])];
     res.type('text/csv').attachment('palm-payments.csv').send(lines.map(row=>row.map(quote).join(',')).join('\r\n'));
+  } catch(error) { next(error); }
+});
+app.get('/reports/go.xlsx', authenticate(), async(req,res,next)=>{
+  try {
+    const records=await goRows(req.user);
+    const workbook=new ExcelJS.Workbook();
+    workbook.creator='Palm'; workbook.created=new Date();
+    const sheet=workbook.addWorksheet('GO Sales');
+    sheet.columns=[
+      {header:'GO Date',key:'go_date',width:14},
+      {header:'Quantity (Ton)',key:'tons',width:18},
+      {header:'Price / Ton (INR)',key:'price',width:20},
+      {header:'Sales (INR)',key:'sales',width:18},
+      {header:'Amount Received (INR)',key:'received',width:24},
+      {header:'Received Date',key:'received_date',width:16},
+      {header:'Outstanding (INR)',key:'outstanding',width:22},
+      {header:'Employee',key:'employee',width:24},
+    ];
+    sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};
+    sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF176B53'}};
+    for(const row of records) sheet.addRow({
+      go_date:row.go_date,tons:row.tons,price:(row.price_per_ton_paise||0)/100,
+      sales:row.sales_paise/100,received:row.amount_received_paise/100,
+      received_date:row.received_date||'',outstanding:row.outstanding_paise/100,employee:row.employee_name,
+    });
+    sheet.getColumn('tons').numFmt='#,##0.000';
+    for(const key of ['price','sales','received','outstanding']) sheet.getColumn(key).numFmt='#,##0.00';
+    sheet.autoFilter={from:'A1',to:'H1'}; sheet.views=[{state:'frozen',ySplit:1}];
+    const file=await workbook.xlsx.writeBuffer();
+    res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .attachment('palm-go-sales.xlsx').send(Buffer.from(file));
   } catch(error) { next(error); }
 });
 app.get('/audit',authenticate(true),async(_req,res,next)=>{try{const {rows}=await pool.query('SELECT a.*,u.name AS actor_name FROM audit_log a JOIN users u ON u.id=a.actor_id ORDER BY a.created_at DESC LIMIT 500');res.json(jsonRows(rows));}catch(e){next(e);}});
