@@ -1,0 +1,13 @@
+node_modules/
+.expo/
+dist/
+coverage/
+android/
+ios/
+.git/
+.env
+.env.*
+*.jks
+*.keystore
+credentials.json
+**/__tests__/

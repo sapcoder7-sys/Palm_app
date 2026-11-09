@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Palm",
+    "slug": "palmapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sapcoder.palmapp"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#176B53",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.sapcoder.palmapp",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.INTERNET"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "owner": "sapcoder",
+    "scheme": "palm",
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "3b376bb6-6c6f-4afd-990b-9546989022da"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: palm-app
+    runtime: node
+    plan: free
+    region: ohio
+    buildCommand: cd server && npm ci --omit=dev && cd ../client && npm ci && npm run build
+    startCommand: cd server && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"

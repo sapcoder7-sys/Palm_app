@@ -1,0 +1,10 @@
+$projectRoot = Split-Path $PSScriptRoot -Parent
+$env:PATH = "$(Join-Path $projectRoot '.tools\git\cmd');$(Join-Path $projectRoot '.tools\flutter\bin');$env:PATH"
+$env:PUB_CACHE = Join-Path $projectRoot '.tools\pub-cache'
+$env:GRADLE_USER_HOME = Join-Path $projectRoot '.tools\gradle'
+$env:ANDROID_HOME = Join-Path $projectRoot '.tools\android'
+$env:ANDROID_USER_HOME = Join-Path $projectRoot '.tools\android-user'
+$env:JAVA_HOME = 'C:\Program Files\Java\jdk-21'
+$env:GIT_CONFIG_COUNT = '1'
+$env:GIT_CONFIG_KEY_0 = 'safe.directory'
+$env:GIT_CONFIG_VALUE_0 = (Join-Path $projectRoot '.tools\flutter').Replace('\', '/')
